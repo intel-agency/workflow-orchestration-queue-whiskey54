@@ -1,0 +1,59 @@
+# Docker Compose for local development
+# Usage: docker compose up -d
+
+services:
+  # ==========================================================================
+  # Notifier Service - FastAPI application
+  # ==========================================================================
+  notifier:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - LOG_LEVEL=INFO
+      - SENTINEL_POLL_INTERVAL_SECONDS=30
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - orchestration-network
+
+  # ==========================================================================
+  # Orchestrator Sentinel - Background monitoring service
+  # ==========================================================================
+  sentinel:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command: ["python", "-m", "src.orchestrator_sentinel"]
+    environment:
+      - LOG_LEVEL=INFO
+      - SENTINEL_POLL_INTERVAL_SECONDS=60
+    restart: unless-stopped
+    networks:
+      - orchestration-network
+    depends_on:
+      notifier:
+        condition: service_healthy
+
+networks:
+  orchestration-network:
+    driver: bridge
+
+# =============================================================================
+# Development overrides (use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up)
+# =============================================================================
+# Create docker-compose.dev.yml for additional development tools:
+#
+# services:
+#   notifier:
+#     volumes:
+#       - ./src:/app/src:ro
+#     environment:
+#       - LOG_LEVEL=DEBUG
